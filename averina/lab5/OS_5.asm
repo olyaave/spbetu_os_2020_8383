@@ -17,7 +17,6 @@ jmp START_INTER
     REQ_KEY_D db 20h
     CODE_ITER DW   1000h
     INTER_STACK dw 64 dup(0)   ; стек прерывания
-    ; STR_OUTPUT db 'Counter:         $'
 
 START_INTER:
 
@@ -27,8 +26,8 @@ START_INTER:
 
     mov ax, SEG INTER_STACK
     mov SS, ax
-    mov SP, 0  ; смещение на вершину стека
-
+    mov ax, offset INTER_STACK
+	  add ax, 128
     push bx
     push BP
     push dx
@@ -91,12 +90,14 @@ _end_:
     pop bp
     POP bx
 
+    mov al, 20h
+    OUT 20h, al
+
     mov ax, KEEP_SS
     mov SS, ax
     mov SP, KEEP_SP
     mov AX, KEEP_AX
-  	mov al, 20h
-  	OUT 20h, al
+
   	IRET
     RET
 ROUT ENDP
@@ -246,14 +247,9 @@ DELETE_ROUT PROC
     mov al, 09h
     int 21h
 
-    ; mov word ptr KEEP_INT,bx
-    ; mov word ptr KEEP_INT+2,es
     mov dx,word ptr  ES:KEEP_INT      ; восстановление прерывания
     mov ax, word ptr  ES:KEEP_INT+2
 
-
-    ; mov dx, ES:[KEEP_INT+2]      ; восстановление прерывания
-    ; mov ax, ES:[KEEP_CS]  ; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     push DS
     mov DS, AX
     mov AH, 25h
