@@ -27,8 +27,10 @@ START_INTER:
 
     mov ax, SEG INTER_STACK
     mov SS, ax
-    mov SP, 0  ; смещение на вершину стека
+    mov ax, offset INTER_STACK
+	  add ax, 128
 
+    mov ax, KEEP_AX
     push bx
     push BP
     push dx
@@ -62,15 +64,13 @@ START_INTER:
     pop bp
     POP bx
 
+    MOV AL, 20H
+    OUT 20H, AL   ; разрешение на обработку прерываний
+                  ; с более низким приоритетом
     mov ax, KEEP_SS
     mov SS, ax
     mov SP, KEEP_SP
     mov AX, KEEP_AX
-    ; POP AX
-
-    MOV AL, 20H
-    OUT 20H, AL   ; разрешение на обработку прерываний
-                  ; с более низким приоритетом
     IRET
 
 ROUT ENDP
