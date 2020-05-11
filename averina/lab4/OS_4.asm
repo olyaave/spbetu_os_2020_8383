@@ -248,6 +248,9 @@ IS_LOADED PROC near
 		mov dx, offset STR_LOADED ; сообщение, что прерывание уже установлено
 		call WRITE_PROC
 
+		cmp UN_FLAG, 0h
+		je end__
+
 		call DELETE_ROUT    ; флаг UN_FLAG = true,
 		jmp end__      ; вызываем выгрузку прерывания
 dontload:
