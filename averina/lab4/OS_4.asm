@@ -1,78 +1,74 @@
-
 CODE      SEGMENT
-      ASSUME DS:DATA, CS:CODE, SS:STACK_
+	   ASSUME CS:CODE, DS:DATA, SS:STACK_
 
-; функция прерывания
 ROUT PROC FAR
 
     jmp START_INTER
-    INTER_STACK dw 64 dup(0)   ; стек прерывания
+    INTER_STACK 	dw 	128 dup (0)
 
-    KEEP_SP dw 0
-    KEEP_SS dw 0
-    KEEP_AX dw 0
-    KEEP_CS dw 0
-    KEEP_IP dw 0
-    PSP dw 0
-    CODE_ITER DW   1000h
+		CODE_ITER DW   1000h
     COUNT_INTER dw 0
-    STR_OUTPUT db 'Counter:         $'
-
+		PSP 	dw	0
+		KEEP_IP 	dw 	0
+		KEEP_CS 	dw 	0
+		KEEP_SS 	dw 	0
+		KEEP_SP 	dw 	0
+		KEEP_AX		dw 	0
+		STR_OUTPUT db 'Counter:         $'
 START_INTER:
 
-    mov KEEP_SS, SS
-    mov KEEP_SP, SP
-    mov KEEP_AX, ax
+		mov KEEP_SS, SS
+		mov KEEP_SP, SP
+		mov KEEP_AX, ax
 
+		mov AX, seg INTER_STACK
+		mov SS, AX
+		mov AX, offset INTER_STACK
+		add AX, 128
+		mov SP, AX
 
-    mov ax, SEG INTER_STACK
-    mov SS, ax
-    mov ax, offset INTER_STACK
-	  add ax, 128
-
-    mov ax, KEEP_AX
-    push bx
+		mov ax, KEEP_AX
+		push bx
     push BP
     push dx
     push di   ; сохранение изменяемых регистров
     push DS
 
-    call GETCURS   ;  получение начальной позиции курсора
+		mov ax, CS
+		mov DS, ax  ; инициализация сегмента данных
+		mov ES, ax
+
+		call GETCURS   ;  получение начальной позиции курсора
     push dx
 
-    mov ax, CS
-    mov DS, ax  ; инициализация сегмента данных
-    mov ES, ax
+		mov ax, COUNT_INTER  ;  увеличиваем счетчик
+		inc ax
+		mov COUNT_INTER, ax
 
-    mov ax, COUNT_INTER  ;  увеличиваем счетчик
-    inc ax
-    mov COUNT_INTER, ax
+		mov di, offset STR_OUTPUT + 15  ; запись номера вызова прерывания
+		call WRD_TO_HEX
+		mov BP, offset STR_OUTPUT    ; помещаем в BP строку для вывода
+		call outputBP
 
-    mov si, offset STR_OUTPUT + 13  ; запись номера вызова прерывания
-    call WRD_TO_DEC
-    mov di, si
-    mov BP, offset STR_OUTPUT    ; помещаем в BP строку для вывода
-    call outputBP
+		pop dx  ; получение начальной позиции курсора
 
-    pop dx  ; получение начальной позиции курсора
+		call SETCURS  ; устанавливаем курсор в начальную позицию
 
-    call SETCURS  ; устанавливаем курсор в начальную позицию
+		pop ds
+		pop di
+		pop dx
+		pop bp
+		POP bx
 
-    pop ds
-    pop di
-    pop dx
-    pop bp
-    POP bx
+		MOV AL, 20H
+		OUT 20H, AL   ; разрешение на обработку прерываний
+									; с более низким приоритетом
+		mov ax, KEEP_SS
+		mov SS, ax
+		mov SP, KEEP_SP
+		mov AX, KEEP_AX
 
-    MOV AL, 20H
-    OUT 20H, AL   ; разрешение на обработку прерываний
-                  ; с более низким приоритетом
-    mov ax, KEEP_SS
-    mov SS, ax
-    mov SP, KEEP_SP
-    mov AX, KEEP_AX
-    IRET
-
+		IRET
 ROUT ENDP
 
 ; Функция получения курсора
@@ -110,109 +106,119 @@ SETCURS PROC
 
 SETCURS ENDP
 
-; функция вывода строки по адресу ES:BP на экран
-outputBP PROC
+TETR_TO_HEX	PROC near
+		and	    AL, 0Fh
+		cmp	    AL,09
+		jbe	    NEXT
+		add	    AL,07
+NEXT:
+    add	    AL,30h
+	  ret
+TETR_TO_HEX	ENDP
 
-    push ax
-    push bx
-    push dx
-    push cx
+BYTE_TO_HEX	PROC near
+		push    CX
+		mov	    AH,AL
+		call	TETR_TO_HEX
+		xchg	AL,AH
+		mov		CL,4
+		shr		AL,CL
+		call	TETR_TO_HEX
+		pop		CX
+		ret
+BYTE_TO_HEX	ENDP
 
-    mov ah, 13h
-    mov al, 1
-    mov bl, 02h  ; зеленый цвет текста
-    mov bh, 0
-    mov cx, 13  ; число экземпляров символов для записи
-    mov dh, 10  ; строка
-    mov dl, 50  ; колонка
-    int 10h
+WRD_TO_HEX	PROC near
+		push	BX
+		mov		BH,AH
+		call	BYTE_TO_HEX
+		mov		[DI],AH
+		dec		DI
+		mov		[DI],AL
+		dec		DI
+		mov		AL,BH
+		call	BYTE_TO_HEX
+		mov		[DI],AH
+		dec		DI
+		mov		[DI],AL
+		pop		BX
+		ret
+WRD_TO_HEX	ENDP
 
-    pop cx
-    pop dx
-    pop bx
-    pop ax
-    ret
+outputBP PROC near
+
+		push 	ax
+		push 	bx
+		push 	dx
+		push 	cx
+
+		mov 	ah, 13h
+		mov 	al, 0
+		mov 	bl, 02h	; зеленый цвет текста
+		mov 	bh, 0
+		mov   cx, 16  ; число экземпляров символов для записи
+		mov   dh, 16  ; строка
+		mov   dl, 50  ; колонка
+		int 	10h
+
+		pop 	cx
+		pop 	dx
+		pop 	bx
+		pop 	ax
+		ret
 outputBP ENDP
+LAST_BYTE:
 
-WRD_TO_DEC PROC
 
-			push dx
-			push bx
-			push cx
-			push ax
-;
-			mov bx,10h
-			mul bx
-			mov bx,0ah
-      xor cx, cx
-division:
-			div bx ; деление числа на 10
-			or dl, 30h
-			mov [si], dl  ; запись полученной цифры в строку
-			dec si
-		  inc cx
-			xor dx, dx
-			cmp ax, 0h
-			jnz division
-
-			pop ax
-			pop cx
-			pop bx
-			pop dx
-			ret
-WRD_TO_DEC ENDP
-LAST_BYTE:  ;  метка конца памяти, необходимой для резидентного прерывания
-
-;  установка прерывания
 SET_ROUT PROC near
-    push ax
-    push bx
-    push cx
-    push dx
-    push DS
-    push ES
+		push ax
+		push bx
+		push cx
+		push dx
+		push DS
+		push ES
 
-    mov ah, 35h
-    mov al, 1CH
-    int 21h
-    mov KEEP_IP, bx    ; сохраняем оригинальный вектор прерывания
-    mov KEEP_CS, es
+		mov ah, 35h
+		mov al, 1CH
+		int 21h
+		mov KEEP_IP, bx    ; сохраняем оригинальный вектор прерывания
+		mov KEEP_CS, es
 
-    push ds
-    mov dx, offset ROUT
-    mov ax, SEG ROUT
-    mov ds, ax
-    mov ah, 25h
-    mov al, 1CH
-    int 21H
-    pop ds
+		push ds
+		mov dx, offset ROUT
+		mov ax, SEG ROUT
+		mov ds, ax
+		mov ah, 25h
+		mov al, 1CH
+		int 21H
+		pop ds
 
-    push dx
-    mov dx, offset STR_DONE
-    call WRITE_PROC
-    pop dx
+		push dx
+		mov dx, offset STR_DONE
+		call WRITE_PROC
+		pop dx
 
-    mov dx, offset LAST_BYTE
-    mov cl, 4
-    shr dx, cl
-    inc dx
-    add dx, CODE   ; Вычисление размера нужной памяти для обработчика
-    sub dx, PSP
-    xor al, al
-    mov ah, 31H   ; освобождение неиспользуемой памяти
-    int 21h
+		mov dx, offset LAST_BYTE
+		mov cl, 4
+		shr dx, cl
+		inc dx
+		add dx, CODE   ; Вычисление размера нужной памяти для обработчика
+		sub dx, PSP
+		xor al, al
+		mov ah, 31H   ; освобождение неиспользуемой памяти
+		int 21h
 
-    pop ES
+		pop ES
 		pop DS
 		pop dx
 		pop cx
 		pop bx
 		pop ax
 
-    mov al, 0
-    mov ah,4ch
-    int 21h
-    ret
+		mov al, 0
+		mov ah,4ch
+		int 21h
+		ret
 SET_ROUT ENDP
 
 WRITE_PROC PROC near
@@ -225,41 +231,36 @@ WRITE_PROC ENDP
 
 ; функция проверки установленного прерывания
 IS_LOADED PROC near
-      push ax
-      push dx
-      push si
+		push ax
+		push dx
+		push si
+		push bx
 
-      mov ah, 35h
-      mov al, 1CH
-      int 21h      ; получение
+		mov AH, 35H
+		mov AL, 1CH
+		int 21H
+		mov bx, offset ROUT
+		mov si, offset CODE_ITER
+		mov ax, es:[bx+si]
+		cmp ax, 1000h   ; проверка, установлено ли уже прерывание или нет
+		jne dontload    ; переход к установке прерывания
 
-      mov bx, offset ROUT
-      mov si, offset CODE_ITER
-      mov ax, es:[bx+si]
-      cmp ax, 1000h   ; проверка, установлено ли уже прерывание или нет
-      jne dontload    ; переход к установке прерывания
+		mov dx, offset STR_LOADED ; сообщение, что прерывание уже установлено
+		call WRITE_PROC
 
-      mov dx, offset STR_LOADED ; сообщение, что прерывание уже установлено
-      call WRITE_PROC
-
-      cmp UN_FLAG, 1h
-      jne end__
-
-      call DELETE_ROUT    ; флаг UN_FLAG = true,
-      jmp end__      ; вызываем выгрузку прерывания
+		call DELETE_ROUT    ; флаг UN_FLAG = true,
+		jmp end__      ; вызываем выгрузку прерывания
 dontload:
-      mov dx, offset STR_NOT_LOADED ; сообщение, что прерывание не установлено
-      call WRITE_PROC
+		cmp UN_FLAG, 1h
+		je end__
 
-      cmp UN_FLAG, 1h
-      je end__
-
-      call SET_ROUT
+		call SET_ROUT
 end__:
-      pop si
-      pop dx
-      pop ax
-      ret
+		pop bx
+		pop si
+		pop dx
+		pop ax
+		ret
 IS_LOADED ENDP
 
 ; Функция для проверки флага /un
@@ -293,83 +294,82 @@ end_:
     ret
 UN_FLAG_DETECT ENDP
 
-; Функция выгрузки обработчика
+
 DELETE_ROUT PROC
-    push ax
-    push bx
-    push dx
-    push DS
-    push ES
-    ; CLI
-    mov ah, 35h
-    mov al, 1Ch
-    int 21h
+		push ax
+		push bx
+		push dx
+		push DS
+		push ES
 
-    mov dx, ES:[KEEP_IP]      ; восстановление прерывания
-    mov ax, ES:[KEEP_CS]
+		mov ah, 35h
+		mov al, 1Ch
+		int 21h
 
-    push DS
-    mov DS, AX
-    mov AH, 25h
-    mov AL, 1Ch      ;  Выгрузка прерывания
-    int 21h
-    pop DS
-
-    mov ax, PSP
-    mov ES, ax
-    push ES
-
-    mov ax, ES:[2Ch]
-    mov ES, ax
-    mov ah, 49h    ; прерывания для освобождения памяти под окружение программы
-    int 21h
-
-    mov dx, offset STR_UNLOAD ; сообщение, что прерывание не установлено
+		mov dx, offset STR_UNLOAD ; сообщение, что прерывание не установлено
     call WRITE_PROC
 
-    pop ES
-    mov ah, 49h   ;  освобождение памяти, занимаемой программой
-    int 21h
-    ; STI
-    pop ES
-    pop DS
-    pop dx
-    pop bx
-    pop ax
+		mov si, offset KEEP_IP
+		sub si, offset ROUT
+		mov dx, ES:[bx+si]
+		mov ax, ES:[bx+si+2]					 ; восстановление прерывания
+		mov DS, ax
 
-    mov al, 0
-    mov ah,4ch
-    int 21h
-    ret
+		mov ah, 25H
+		mov al, 1CH
+		int 21H										;  Выгрузка прерывания
+		mov ax, ES:[bx+si-2]
+		mov ES, AX
+
+		push ES
+		mov ax, ES:[2Ch]
+		mov ES, ax				; прерывания для освобождения памяти под окружение программы
+		mov ah, 49h
+		int 21h
+
+		pop ES
+		mov ah, 49h
+		int 21h
+
+		pop ES
+		pop DS
+		pop dx
+		pop bx
+		pop ax
+
+		mov al, 0
+		mov ah,4ch
+		int 21h
+		ret
 DELETE_ROUT ENDP
 
 MAIN PROC NEAR
-    mov PSP, es
-    mov ax,DATA
-	  mov ds,ax
+  mov PSP, es
+  mov ax,DATA
+	mov ds,ax
 
-    call UN_FLAG_DETECT
-    call IS_LOADED
+  call UN_FLAG_DETECT
+  call IS_LOADED
 
-    mov al, 0
-    mov ah,4ch
-    int 21h
+  mov al, 0
+  mov ah,4ch
+	int 21h
 MAIN ENDP
 
-CODE      ENDS
+CODE 		ENDS
 
 STACK_    SEGMENT  STACK
    DW 128 DUP(?)
 STACK_    ENDS
 
-DATA      SEGMENT
-   UN_FLAG dw 0
-   STR_UNLOAD db 'The interruption of unloaded.',0AH, 0DH,'$'
-   STR_NOT_LOADED db 'Interapt was not loaded before.', 0AH, 0DH,'$'
-   STR_FLAG db 'Flag input.', 0AH, 0DH,'$'
-   STR_DONE db 'The interrupt is set.', 0AH, 0DH,'$'
-   STR_LOADED db 'Interapt was loaded before', 0AH, 0DH,'$'
+DATA SEGMENT
+	UN_FLAG dw 0
+	STR_UNLOAD db 'The interruption is unloaded.',0AH, 0DH,'$'
+	STR_NOT_LOADED db 'Interapt was not loaded before.', 0AH, 0DH,'$'
+	STR_FLAG db 'Flag input.', 0AH, 0DH,'$'
+	STR_DONE db 'The interrupt is set.', 0AH, 0DH,'$'
+	STR_LOADED db 'Interapt was loaded before', 0AH, 0DH,'$'
 
-DATA      ENDS
+DATA 		ENDS
 
 END MAIN
