@@ -7,15 +7,17 @@ ROUT PROC FAR
 
 jmp START_INTER
 
+    CODE_ITER DW   1323h
     KEEP_SP dw 0
     KEEP_SS dw 0
     KEEP_AX dw 0
-    KEEP_INT DD 0
+    KEEP_IP DW 0
+    KEEP_CS DW 0
+    PSP dw 0
     SYMBOL db 0
     REQ_KEY_A db 1Eh
     REQ_KEY_S db 1Fh
     REQ_KEY_D db 20h
-    CODE_ITER DW   1000h
     INTER_STACK dw 64 dup(0)   ; стек прерывания
 
 START_INTER:
@@ -33,6 +35,7 @@ START_INTER:
     push dx
     push di   ; сохранение изменяемых регистров
     push DS
+    push si
 
     push ax
     mov ah, 2
@@ -43,7 +46,7 @@ START_INTER:
 std_inter:
     pop ax
     pushf
-    call dword ptr CS:[KEEP_INT]
+    call dword ptr CS:KEEP_IP
     jmp _end_
 
 do:
@@ -84,6 +87,7 @@ next:
     ; jnz skip
 
 _end_:
+    pop si
     pop ds
     pop di
     pop dx
@@ -115,8 +119,8 @@ SET_ROUT PROC near
     mov AH, 35h
 		mov AL, 09h
 		int 21h
-    mov word ptr KEEP_INT,bx
-    mov word ptr KEEP_INT+2,es
+    mov KEEP_IP, bx    ; сохраняем оригинальный вектор прерывания
+		mov KEEP_CS, es
 
     push ds
     mov dx, offset ROUT
@@ -173,10 +177,11 @@ IS_LOADED PROC near
       mov al, 09H
       int 21h      ; получение
 
-      mov bx, offset ROUT
+      ; mov bx, offset ROUT
       mov si, offset CODE_ITER
+      sub si, offset ROUT
       mov ax, es:[bx+si]
-      cmp ax, 1000h   ; проверка, установлено ли уже прерывание или нет
+      cmp ax, 1323h   ; проверка, установлено ли уже прерывание или нет
       jne dontload    ; переход к установке прерывания
 
       mov dx, offset STR_LOADED ; сообщение, что прерывание уже установлено
@@ -240,55 +245,57 @@ DELETE_ROUT PROC
     push ax
     push bx
     push dx
+    push si
     push DS
     push ES
-    CLI
+
     mov ah, 35h
     mov al, 09h
     int 21h
 
-    mov dx,word ptr  ES:KEEP_INT      ; восстановление прерывания
-    mov ax, word ptr  ES:KEEP_INT+2
-
-    push DS
-    mov DS, AX
-    mov AH, 25h
-    mov AL, 09h      ;  Выгрузка прерывания
-    int 21h
-    pop DS
-
-    mov ax, ES:PSP
-    mov ES, ax
-    push ES
-
-    mov ax, ES:[2Ch]
-    mov ES, ax
-    mov ah, 49h    ; прерывания для освобождения памяти под окружение программы
-    int 21h
-
+    push dx
     mov dx, offset STR_UNLOAD ; сообщение, что прерывание не установлено
     call WRITE_PROC
+    pop dx
+
+    mov si, offset KEEP_IP
+		sub si, offset ROUT
+		mov dx, ES:[bx+si]
+		mov ax, ES:[bx+si+2]					 ; восстановление прерывания
+		mov DS, ax
+
+		mov ah, 25H
+		mov al, 09h
+		int 21H										;  Выгрузка прерывания
+		mov ax, ES:[bx+si+4]
+		mov ES, AX
+
+		push ES
+		mov ax, ES:[2Ch]
+		mov ES, ax				; прерывания для освобождения памяти под окружение программы
+		mov ah, 49h
+		int 21h
+		pop ES
+
+		mov ah, 49h
+		int 21h
 
     pop ES
-    mov ah, 49h   ;  освобождение памяти, занимаемой программой
-    int 21h
-    STI
-    pop ES
     pop DS
+    pop si
     pop dx
     pop bx
     pop ax
 
-    mov al, 0
-    mov ah,4ch
-    int 21h
+    ; mov al, 0
+    ; mov ah,4ch
+    ; int 21h
     ret
+
 DELETE_ROUT ENDP
 
 MAIN PROC
-; push ds
-; xor ax, ax
-; push ax
+
     mov PSP, es
     mov ax, DATA
 	  mov ds,ax
@@ -309,12 +316,11 @@ STACK_    ENDS
 
 DATA      SEGMENT
    UN_FLAG dw 0
-   PSP dw 0
-   STR_UNLOAD db 'The interruption of unloaded.',0AH, 0DH,'$'
+   STR_UNLOAD db 'The interruption unloaded.',0AH, 0DH,'$'
    STR_NOT_LOADED db 'Interapt was not loaded before.', 0AH, 0DH,'$'
    STR_FLAG db 'Flag input.', 0AH, 0DH,'$'
    STR_DONE db 'The interrupt is set.', 0AH, 0DH,'$'
-   STR_LOADED db 'Interapt was loaded before', 0AH, 0DH,'$'
+   STR_LOADED db 'Interapt loaded before', 0AH, 0DH,'$'
 
 DATA      ENDS
 
