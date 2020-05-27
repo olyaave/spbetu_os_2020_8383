@@ -28,6 +28,8 @@ START_INTER:
 		mov SP, AX
 
 		mov ax, KEEP_AX
+		push es
+		push si
 		push bx
     push BP
     push dx
@@ -59,6 +61,8 @@ START_INTER:
 		pop dx
 		pop bp
 		POP bx
+		pop si
+		pop es
 
 		MOV AL, 20H
 		OUT 20H, AL   ; разрешение на обработку прерываний
